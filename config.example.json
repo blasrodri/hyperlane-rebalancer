@@ -1,0 +1,15 @@
+{
+  "whitelist": {
+    "domains": {
+      "2340": [
+        "0x742d35cc6634c0532925a3b844bc9e7595f0beb0"
+      ],
+      "1": [
+        "0x1234567890123456789012345678901234567890"
+      ],
+      "137": [
+        "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd"
+      ]
+    }
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "routes": [
+    {
+      "tx_hash": "ABC123DEF456",
+      "block_height": 1000000,
+      "from": "celestia1sender1abc...",
+      "amount": "1000000",
+      "denom": "utia",
+      "memo": "{\"destination_domain\": 1380012617, \"recipient\": \"0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0\", \"token_id\": \"0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef\", \"amount\": \"1000000\"}",
+      "route_info": {
+        "destination_domain": 1380012617,
+        "recipient": "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0",
+        "token_id": "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+        "amount": "1000000"
+      }
+    },
+    {
+      "tx_hash": "XYZ789GHI012",
+      "block_height": 1000001,
+      "from": "celestia1sender2def...",
+      "amount": "2000000",
+      "denom": "utia",
+      "memo": "{\"destination_domain\": 137, \"recipient\": \"0x8b3192f5eebad91f18723bc860fdb53c27af10ab\", \"token_id\": \"0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890\"}",
+      "route_info": {
+        "destination_domain": 137,
+        "recipient": "0x8b3192f5eebad91f18723bc860fdb53c27af10ab",
+        "token_id": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
+      }
+    }
+  ],
+  "total_amount": "3000000",
+  "multisig_address": "celestia1multisig123..."
+}
