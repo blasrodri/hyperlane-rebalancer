@@ -1,5 +1,5 @@
-# Binaries
-celestia-rebalancer
+# Binaries (only ignore binary at root, not cmd/ directory)
+/celestia-rebalancer
 *.exe
 *.dll
 *.so
