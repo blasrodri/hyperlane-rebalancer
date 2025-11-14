@@ -76,17 +76,28 @@ func (p *Parser) ParseRoutes(multisigAddr string, fromHeight, toHeight int64) (*
 				continue
 			}
 
-			// Skip if no custom_hook_metadata (no routing information)
-			if transfer.CustomHookMetadata == "" {
-				fmt.Printf("Warning: tx %s has no custom_hook_metadata, skipping\n", tx.Hash)
-				continue
-			}
+			var routeInfo *types.RouteInfo
 
-			// Parse the custom_hook_metadata for routing information
-			routeInfo, err := types.ParseCustomHookMetadata(transfer.CustomHookMetadata)
-			if err != nil {
-				// Skip transactions without valid routing info
-				fmt.Printf("Warning: tx %s has invalid custom_hook_metadata: %v\n", tx.Hash, err)
+			// Check if we have custom_hook_metadata (for MsgRemoteTransfer)
+			if transfer.CustomHookMetadata != "" {
+				// Parse the custom_hook_metadata for routing information
+				var err error
+				routeInfo, err = types.ParseCustomHookMetadata(transfer.CustomHookMetadata)
+				if err != nil {
+					// Skip transactions without valid routing info
+					fmt.Printf("Warning: tx %s has invalid custom_hook_metadata: %v\n", tx.Hash, err)
+					continue
+				}
+			} else if transfer.DestinationDomain != 0 {
+				// For bank sends with routing metadata in memo, create RouteInfo from transfer fields
+				routeInfo = &types.RouteInfo{
+					DestinationDomain: transfer.DestinationDomain,
+					Recipient:         transfer.To,
+					TokenID:           transfer.TokenID,
+				}
+			} else {
+				// No routing information available
+				fmt.Printf("Warning: tx %s has no routing information, skipping\n", tx.Hash)
 				continue
 			}
 

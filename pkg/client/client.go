@@ -2,11 +2,14 @@ package client
 
 import (
 	"context"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	"strings"
 
 	warptypes "github.com/bcp-innovations/hyperlane-cosmos/x/warp/types"
 	"github.com/cosmos/cosmos-sdk/client"
-	"github.com/cosmos/cosmos-sdk/types"
+	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/types/tx"
 	banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
 	"google.golang.org/grpc"
@@ -57,7 +60,7 @@ func (c *Client) GetTransactionsByHeight(fromHeight, toHeight int64) ([]*Transac
 		// Query transactions at this height using block search
 		query := fmt.Sprintf("tx.height=%d", height)
 		req := &tx.GetTxsEventRequest{
-			Events:  []string{query},
+			Query:   query,
 			OrderBy: tx.OrderBy_ORDER_BY_ASC,
 			Page:    1,
 			Limit:   100, // Max transactions per block
@@ -101,7 +104,7 @@ func (c *Client) GetTransactionsByHeight(fromHeight, toHeight int64) ([]*Transac
 type BankSend struct {
 	From   string
 	To     string
-	Amount types.Coins
+	Amount sdk.Coins
 }
 
 // ExtractBankSends extracts all bank send messages from a transaction
@@ -162,7 +165,15 @@ type HyperlaneTransfer struct {
 	CustomHookMetadata string // Routing information for multi-hop forwarding
 }
 
+// RoutingMetadata represents routing information in transaction memo
+type RoutingMetadata struct {
+	DestinationDomain uint32 `json:"destination_domain"`
+	Recipient         string `json:"recipient"`
+	TokenID           string `json:"token_id"`
+}
+
 // ExtractHyperlaneTransfers extracts all Hyperlane MsgRemoteTransfer messages from a transaction
+// It also extracts bank transfers with routing metadata in the memo field
 func ExtractHyperlaneTransfers(txn *Transaction) ([]HyperlaneTransfer, error) {
 	var transfers []HyperlaneTransfer
 
@@ -170,8 +181,18 @@ func ExtractHyperlaneTransfers(txn *Transaction) ([]HyperlaneTransfer, error) {
 		return transfers, nil
 	}
 
+	// Check if transaction memo contains routing metadata
+	var routingMeta *RoutingMetadata
+	if txn.Memo != "" {
+		var meta RoutingMetadata
+		if err := json.Unmarshal([]byte(txn.Memo), &meta); err == nil {
+			// Successfully parsed routing metadata from memo
+			routingMeta = &meta
+		}
+	}
+
 	for _, anyMsg := range txn.Tx.Body.Messages {
-		// Check if this is a MsgRemoteTransfer by type URL
+		// Check if this is a MsgRemoteTransfer by type URL (outgoing transfer)
 		if anyMsg.TypeUrl == "/hyperlane.warp.v1.MsgRemoteTransfer" {
 			var msg warptypes.MsgRemoteTransfer
 			if err := msg.Unmarshal(anyMsg.Value); err != nil {
@@ -193,6 +214,30 @@ func ExtractHyperlaneTransfers(txn *Transaction) ([]HyperlaneTransfer, error) {
 				CustomHookMetadata: msg.CustomHookMetadata,
 			})
 		}
+
+		// Check for bank send messages with routing metadata in memo (incoming transfers)
+		if anyMsg.TypeUrl == "/cosmos.bank.v1beta1.MsgSend" && routingMeta != nil {
+			var sendMsg banktypes.MsgSend
+			if err := sendMsg.Unmarshal(anyMsg.Value); err != nil {
+				continue
+			}
+
+			// Extract amount (assuming single coin)
+			if len(sendMsg.Amount) == 0 {
+				continue
+			}
+			amount := sendMsg.Amount[0].Amount.String()
+
+			// For bank sends, From is the multisig (recipient of bank send)
+			// and To is the final forwarding destination from routing metadata
+			transfers = append(transfers, HyperlaneTransfer{
+				From:              sendMsg.ToAddress, // The multisig that received the funds
+				To:                routingMeta.Recipient,
+				Amount:            amount,
+				DestinationDomain: routingMeta.DestinationDomain,
+				TokenID:           routingMeta.TokenID,
+			})
+		}
 	}
 
 	return transfers, nil
@@ -202,6 +247,23 @@ func ExtractHyperlaneTransfers(txn *Transaction) ([]HyperlaneTransfer, error) {
 func FilterHyperlaneTransfersToAddress(txs []*Transaction, targetAddress string) ([]*Transaction, error) {
 	var filtered []*Transaction
 
+	// Convert target address from bech32 to hex for comparison
+	targetHex := ""
+	if !strings.HasPrefix(targetAddress, "0x") {
+		// It's a bech32 address, convert to hex
+		addr, err := sdk.AccAddressFromBech32(targetAddress)
+		if err == nil {
+			targetHex = "0x" + hex.EncodeToString(addr)
+			// Pad to 32 bytes (64 hex chars)
+			if len(targetHex) < 66 { // 2 for "0x" + 64 for 32 bytes
+				padding := strings.Repeat("0", 66-len(targetHex))
+				targetHex = "0x" + padding + targetHex[2:]
+			}
+		}
+	} else {
+		targetHex = targetAddress
+	}
+
 	for _, tx := range txs {
 		transfers, err := ExtractHyperlaneTransfers(tx)
 		if err != nil {
@@ -209,8 +271,14 @@ func FilterHyperlaneTransfersToAddress(txs []*Transaction, targetAddress string)
 		}
 
 		for _, transfer := range transfers {
-			// Compare the recipient address (need to handle both hex formats and bech32)
-			if transfer.To == targetAddress || transfer.From == targetAddress {
+			// Compare the recipient address (hex format)
+			// Normalize both to lowercase for comparison
+			transferTo := strings.ToLower(transfer.To)
+			transferFrom := strings.ToLower(transfer.From)
+			target := strings.ToLower(targetHex)
+			targetBech32 := strings.ToLower(targetAddress)
+
+			if transferTo == target || transferFrom == targetBech32 || transferTo == targetBech32 {
 				filtered = append(filtered, tx)
 				break
 			}
