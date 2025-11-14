@@ -249,14 +249,6 @@ The Hyperlane relayers will automatically deliver the funds to the destination c
 - Hyperlane message delivery (check Hyperlane explorer)
 - Funds arrival on destination chain
 
-## RPC Endpoints
-
-| Network | gRPC Endpoint | Use Case |
-|---------|---------------|----------|
-| **Mainnet** | `https://rpc.celestia.org:9090` | Production |
-| **Mocha Testnet** | `https://rpc-mocha.pops.one:9090` | Testing |
-| **Local Node** | `localhost:9090` | Development |
-
 
 ## Architecture
 
